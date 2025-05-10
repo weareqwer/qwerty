@@ -93,7 +93,7 @@ public class TextGraphGUI extends JFrame {
                 JOptionPane.showMessageDialog(this, "File loaded successfully.");
             } catch (IOException ex) {
                 JOptionPane.showMessageDialog(this, "Error loading file: " + ex.getMessage());
-            }
+            }//커밋
         }
     }
 
