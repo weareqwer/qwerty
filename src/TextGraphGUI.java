@@ -58,7 +58,7 @@ public class TextGraphGUI extends JFrame {
         runButton.setPreferredSize(new Dimension(100, 30));
         runButton.setMaximumSize(new Dimension(100, 30));
         JPanel runPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        runPanel.add(runButton);
+        runPanel.add(runButton); //변경
         inputPanel.add(runPanel, BorderLayout.EAST);
 
         topPanel.add(inputPanel);
