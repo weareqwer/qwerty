@@ -1,146 +1,152 @@
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.Pattern;
 
+/**
+ * Class for building and analyzing a directed word graph from text.
+ */
 public class TextGraph {
-    static int[][] E, D, path;
-    static String[] TxtWordArray;
-    static int wordNum = 0;
-    static boolean flag = true;
-    static final int INFINITY = 10000;
-    static StringBuffer preStr = new StringBuffer();
-    static StringBuffer pathWay = new StringBuffer();
-    static StringBuffer randomPath = new StringBuffer();
-    static List<String> wordList = new ArrayList<>();
-    static List<String> edgePairList = new ArrayList<>();
-    static HashMap<String, List<String>> bridgeMap = new HashMap<>();
-    static Pattern p = Pattern.compile("[.,\"\\?!:' ]");
-    static Random random = new Random();
+    private int[][] edgeMatrix;
+    private int[][] distance;
+    private int[][] path;
+    private String[] wordArray;
+    private int wordCount;
+    private static final int INFINITY = 10000;
 
-    public static void main(String[] args) throws IOException {
-        Scanner scanner = new Scanner(System.in);
-        System.out.print("Enter the path of the text file: ");
-        String fileAdr = scanner.nextLine();
-        InputStream fi = new FileInputStream(fileAdr);
+    private final StringBuilder preStr = new StringBuilder();
+    private final StringBuilder pathWay = new StringBuilder();
+    private final StringBuilder randomPath = new StringBuilder();
 
-        int c;
-        while ((c = fi.read()) != -1) {
-            Character m = new Character((char) c);
-            if (Character.isLetter(m)) {
-                preStr.append(m.toString());
-            } else if (p.matcher(m.toString()).matches()) {
-                preStr.append(" ");
+    private final List<String> wordList = new ArrayList<>();
+    private final List<String> edgePairList = new ArrayList<>();
+    private final Map<String, List<String>> bridgeMap = new HashMap<>();
+    private final Random random = new Random();
+
+    private static final Pattern PUNCTUATION_PATTERN = Pattern.compile("[.,\"\\?!:' ]");
+
+    public void buildGraphFromFile(String filePath) throws IOException {
+        wordList.clear();
+        edgePairList.clear();
+        bridgeMap.clear();
+        preStr.setLength(0);
+
+        try (InputStream input = new FileInputStream(filePath)) {
+            int c;
+            while ((c = input.read()) != -1) {
+                char m = (char) c;
+                if (Character.isLetter(m)) {
+                    preStr.append(m);
+                } else if (PUNCTUATION_PATTERN.matcher(Character.toString(m)).matches()) {
+                    preStr.append(" ");
+                }
             }
         }
 
-        TxtWordArray = preStr.toString().toLowerCase().trim().split("\\s+");
-        for (String word : TxtWordArray) {
+        wordArray = preStr.toString().toLowerCase().trim().split("\\s+");
+        for (String word : wordArray) {
             if (!wordList.contains(word)) {
                 wordList.add(word);
-                wordNum++;
             }
         }
+        wordCount = wordList.size();
+        edgeMatrix = new int[wordCount][wordCount];
 
-        E = new int[wordNum][wordNum];
         buildEdge();
         createBridgeMap();
-        Floyd();
+        floyd();
+    }
 
-        while (true) {
-            System.out.println("\nChoose a function:");
-            System.out.println("1. Show Directed Graph");
-            System.out.println("2. Query Bridge Words");
-            System.out.println("3. Generate New Text");
-            System.out.println("4. Calculate Shortest Path");
-            System.out.println("5. Random Walk");
-            System.out.println("6. Calculate PageRank");
-            System.out.println("7. Exit");
-            System.out.print("Your choice: ");
-            int choice = scanner.nextInt();
-            scanner.nextLine();
+    public void buildGraphFromText(String text) {
+        preStr.setLength(0);
+        preStr.append(text);
 
-            if (choice == 1) {
-                showDirectedGraph();
-            } else if (choice == 2) {
-                System.out.print("Enter two words separated by space: ");
-                String[] input = scanner.nextLine().split("\\s+");
-                if (input.length == 2) {
-                    System.out.println(queryBridgeWords(input[0], input[1]));
+        wordArray = preStr.toString().toLowerCase().trim().split("\\s+");
+
+        wordList.clear();
+        for (String word : wordArray) {
+            if (!wordList.contains(word)) {
+                wordList.add(word);
+            }
+        }
+
+        wordCount = wordList.size();
+        edgeMatrix = new int[wordCount][wordCount];
+
+        buildEdge();
+        createBridgeMap();
+        floyd();
+    }
+
+
+    private void buildEdge() {
+        for (int i = 0; i < wordCount; i++) {
+            Arrays.fill(edgeMatrix[i], INFINITY);
+        }
+
+        String prev = null;
+        for (String word : wordArray) {
+            if (prev != null) {
+                int from = wordList.indexOf(prev);
+                int to = wordList.indexOf(word);
+                if (edgeMatrix[from][to] == INFINITY) {
+                    edgeMatrix[from][to] = 1;
                 } else {
-                    System.out.println("Invalid input!");
+                    edgeMatrix[from][to]++;
                 }
-            } else if (choice == 3) {
-                System.out.print("Enter a new sentence: ");
-                String newText = scanner.nextLine();
-                System.out.println(generateNewText(newText));
-            } else if (choice == 4) {
-                System.out.print("Enter two words separated by space: ");
-                String[] input = scanner.nextLine().split("\\s+");
-                if (input.length == 2) {
-                    System.out.println(calcShortestPath(input[0], input[1]));
-                } else {
-                    System.out.println("Invalid input!");
-                }
-            } else if (choice == 5) {
-                System.out.println("Random walk result:");
-                String randomText = randomWalk();
-                System.out.println(randomText);
-                saveRandomWalk(randomText);
-            } else if (choice == 6) {
-                System.out.print("Enter a word: ");
-                String word = scanner.nextLine();
-                System.out.println("PageRank: " + calPageRank(word));
-            } else if (choice == 7) {
-                System.out.println("Exiting...");
-                break;
-            } else {
-                System.out.println("Invalid choice!");
             }
+            prev = word;
         }
-        fi.close();
     }
 
-    protected static void showDirectedGraph() {
-        System.out.println("=== Directed Graph ===");
-        for (int i = 0; i < wordNum; i++) {
-            for (int j = 0; j < wordNum; j++) {
-                if (E[i][j] != INFINITY) {
-                    String word1 = wordList.get(i);
-                    String word2 = wordList.get(j);
-                    System.out.printf("%s -> %s (weight: %d)\n", word1, word2, E[i][j]);
+    private void createBridgeMap() {
+        for (int i = 0; i < wordArray.length - 2; i++) {
+            String key = wordArray[i] + "#" + wordArray[i + 2];
+            bridgeMap.computeIfAbsent(key, k -> new ArrayList<>()).add(wordArray[i + 1]);
+        }
+    }
+
+    private void floyd() {
+        distance = new int[wordCount][wordCount];
+        path = new int[wordCount][wordCount];
+
+        for (int i = 0; i < wordCount; i++) {
+            for (int j = 0; j < wordCount; j++) {
+                distance[i][j] = edgeMatrix[i][j];
+                path[i][j] = -1;
+            }
+        }
+
+        for (int k = 0; k < wordCount; k++) {
+            for (int i = 0; i < wordCount; i++) {
+                for (int j = 0; j < wordCount; j++) {
+                    if (distance[i][k] + distance[k][j] < distance[i][j]) {
+                        distance[i][j] = distance[i][k] + distance[k][j];
+                        path[i][j] = k;
+                    }
                 }
             }
         }
     }
 
-    protected static void buildEdge() {
-        int preNum, curNum;
-        String pre = "#";
-        for (String word : TxtWordArray) {
-            if (!pre.equals("#")) {
-                preNum = wordList.indexOf(pre);
-                curNum = wordList.indexOf(word);
-                E[preNum][curNum]++;
-            }
-            pre = word;
-        }
-        for (int i = 0; i < wordNum; i++) {
-            for (int j = 0; j < wordNum; j++) {
-                if (E[i][j] == 0) {
-                    E[i][j] = INFINITY;
+    public String getDirectedGraphText() {
+        StringBuilder sb = new StringBuilder("=== Directed Graph ===\n");
+        for (int i = 0; i < wordCount; i++) {
+            for (int j = 0; j < wordCount; j++) {
+                if (edgeMatrix[i][j] != INFINITY) {
+                    sb.append(wordList.get(i))
+                            .append(" -> ")
+                            .append(wordList.get(j))
+                            .append(" (weight: ")
+                            .append(edgeMatrix[i][j])
+                            .append(")\n");
                 }
             }
         }
+        return sb.toString();
     }
 
-    protected static void createBridgeMap() {
-        for (int i = 0; i < TxtWordArray.length - 2; i++) {
-            String key = TxtWordArray[i] + "#" + TxtWordArray[i + 2];
-            bridgeMap.computeIfAbsent(key, k -> new ArrayList<>()).add(TxtWordArray[i + 1]);
-        }
-    }
-
-    protected static String queryBridgeWords(String word1, String word2) {
+    public String queryBridgeWords(String word1, String word2) {
         word1 = word1.toLowerCase();
         word2 = word2.toLowerCase();
         if (!wordList.contains(word1) || !wordList.contains(word2)) {
@@ -150,47 +156,25 @@ public class TextGraph {
         if (!bridgeMap.containsKey(key)) {
             return "No bridge words from \"" + word1 + "\" to \"" + word2 + "\"!";
         }
-        return "The bridge words from \"" + word1 + "\" to \"" + word2 + "\" are: " + String.join(", ", bridgeMap.get(key)) + ".";
+        return "The bridge words from \"" + word1 + "\" to \"" + word2 + "\" are: " +
+                String.join(", ", bridgeMap.get(key)) + ".";
     }
 
-    protected static String generateNewText(String inputText) {
-        String[] TextWord = inputText.toLowerCase().trim().split("\\s+");
-        StringBuilder newText = new StringBuilder();
-        newText.append(TextWord[0]);
-        for (int i = 0; i < TextWord.length - 1; i++) {
-            String key = TextWord[i] + "#" + TextWord[i + 1];
+    public String generateNewText(String inputText) {
+        String[] words = inputText.toLowerCase().trim().split("\\s+");
+        StringBuilder newText = new StringBuilder(words[0]);
+        for (int i = 0; i < words.length - 1; i++) {
+            String key = words[i] + "#" + words[i + 1];
             if (bridgeMap.containsKey(key)) {
                 String bridge = bridgeMap.get(key).get(0);
-                newText.append(" ").append(bridge).append(" ").append(TextWord[i + 1]);
-            } else {
-                newText.append(" ").append(TextWord[i + 1]);
+                newText.append(" ").append(bridge);
             }
+            newText.append(" ").append(words[i + 1]);
         }
         return newText.toString();
     }
 
-    protected static void Floyd() {
-        D = new int[wordNum][wordNum];
-        path = new int[wordNum][wordNum];
-        for (int i = 0; i < wordNum; i++) {
-            for (int j = 0; j < wordNum; j++) {
-                D[i][j] = E[i][j];
-                path[i][j] = -1;
-            }
-        }
-        for (int k = 0; k < wordNum; k++) {
-            for (int i = 0; i < wordNum; i++) {
-                for (int j = 0; j < wordNum; j++) {
-                    if (D[i][k] + D[k][j] < D[i][j]) {
-                        D[i][j] = D[i][k] + D[k][j];
-                        path[i][j] = k;
-                    }
-                }
-            }
-        }
-    }
-
-    protected static String calcShortestPath(String word1, String word2) {
+    public String calcShortestPath(String word1, String word2) {
         word1 = word1.toLowerCase();
         word2 = word2.toLowerCase();
         if (!wordList.contains(word1) || !wordList.contains(word2)) {
@@ -198,188 +182,101 @@ public class TextGraph {
         }
         int start = wordList.indexOf(word1);
         int end = wordList.indexOf(word2);
-
-        if (D[start][end] == INFINITY) {
+        if (distance[start][end] == INFINITY) {
             return "No path between \"" + word1 + "\" and \"" + word2 + "\"!";
         }
 
         pathWay.setLength(0);
-        pathWay.append(word1 + " -> ");
+        pathWay.append(word1).append(" -> ");
         getPath(start, end);
         pathWay.append(word2);
-        return "Shortest path: " + pathWay.toString() + "\nLength: " + D[start][end];
+
+        return "Shortest path: " + pathWay + "\nLength: " + distance[start][end];
     }
 
-    protected static void getPath(int start, int end) {
+    private void getPath(int start, int end) {
         if (path[start][end] == -1) {
             return;
         }
         getPath(start, path[start][end]);
-        pathWay.append(wordList.get(path[start][end]) + " -> ");
+        pathWay.append(wordList.get(path[start][end])).append(" -> ");
     }
 
-    protected static String randomWalk() {
-        if (wordNum == 0) return "Empty graph!";
-        int ranNum = random.nextInt(wordNum);
-        String ranWord = wordList.get(ranNum);
+    public String randomWalk() {
+        if (wordCount == 0) {
+            return "Empty graph!";
+        }
+        edgePairList.clear();
         randomPath.setLength(0);
-        randomPath.append(ranWord);
 
-        flag = true;
-        walkFrom(ranNum);
+        int start = random.nextInt(wordCount);
+        String currentWord = wordList.get(start);
+        randomPath.append(currentWord);
+        walkFrom(start);
+
         return randomPath.toString();
     }
 
-    protected static void walkFrom(int s) {
-        for (int i = 0; i < wordNum; i++) {
-            if (flag) {
-                String edgePair = s + "#" + i;
-                if (E[s][i] != INFINITY && !edgePairList.contains(edgePair)) {
-                    edgePairList.add(edgePair);
-                    randomPath.append(" -> ").append(wordList.get(i));
-                    walkFrom(i);
-                } else if (isEnd(s)) {
-                    flag = false;
-                }
+    private void walkFrom(int current) {
+        for (int i = 0; i < wordCount; i++) {
+            String edgeKey = current + "#" + i;
+            if (edgeMatrix[current][i] != INFINITY && !edgePairList.contains(edgeKey)) {
+                edgePairList.add(edgeKey);
+                randomPath.append(" -> ").append(wordList.get(i));
+                walkFrom(i);
+                break;
             }
         }
     }
 
-    protected static boolean isEnd(int s) {
-        for (int i = 0; i < wordNum; i++) {
-            String edgePair = s + "#" + i;
-            if (E[s][i] != INFINITY && !edgePairList.contains(edgePair)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    protected static void saveRandomWalk(String content) {
-        try {
-            File fo = new File("C:\\Users\\123qw\\qwerty\\software\\untitled\\randomwalk\\2.txt");
-            FileWriter fileWriter = new FileWriter(fo);
-            fileWriter.write(content);
-            fileWriter.close();
+    public void saveRandomWalk(String content) {
+        File output = new File("randomwalk_output.txt");
+        try (Writer writer = new OutputStreamWriter(new FileOutputStream(output), StandardCharsets.UTF_8)) {
+            writer.write(content);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    // PageRank 계산
-    protected static Double calPageRank(String word) {
+    public double calPageRank(String word) {
         word = word.toLowerCase();
-
         final double d = 0.85;
         final int maxIterations = 100;
         final double tolerance = 1.0e-6;
 
-        Set<String> nodes = new HashSet<>(wordList);
-        Map<String, Double> pr = new HashMap<>();
-
-        for (String node : nodes) {
-            pr.put(node, 1.0 / nodes.size());
-        }
-
-        Set<String> danglingNodes = new HashSet<>();
-        for (String node : nodes) {
-            boolean hasOutEdge = false;
-            int idx = wordList.indexOf(node);
-            for (int i = 0; i < wordNum; i++) {
-                if (E[idx][i] != INFINITY) {
-                    hasOutEdge = true;
-                    break;
-                }
-            }
-            if (!hasOutEdge) {
-                danglingNodes.add(node);
-            }
+        Map<String, Double> rank = new HashMap<>();
+        for (String node : wordList) {
+            rank.put(node, 1.0 / wordCount);
         }
 
         for (int iter = 0; iter < maxIterations; iter++) {
-            Map<String, Double> nextPr = new HashMap<>();
-            double danglingSum = 0.0;
+            Map<String, Double> newRank = new HashMap<>();
+            double diff = 0.0;
 
-            for (String dn : danglingNodes) {
-                danglingSum += pr.get(dn);
-            }
-
-            for (String node : nodes) {
-                double rank = (1 - d) / nodes.size();
-                rank += d * danglingSum / nodes.size();
-
-                for (String other : nodes) {
-                    int from = wordList.indexOf(other);
-                    int to = wordList.indexOf(node);
-                    if (E[from][to] != INFINITY) {
+            for (String node : wordList) {
+                double sum = 0.0;
+                int j = wordList.indexOf(node);
+                for (int i = 0; i < wordCount; i++) {
+                    if (edgeMatrix[i][j] != INFINITY) {
                         int outDegree = 0;
-                        for (int k = 0; k < wordNum; k++) {
-                            if (E[from][k] != INFINITY) outDegree++;
+                        for (int k = 0; k < wordCount; k++) {
+                            if (edgeMatrix[i][k] != INFINITY) {
+                                outDegree++;
+                            }
                         }
                         if (outDegree > 0) {
-                            rank += d * pr.get(other) / outDegree;
+                            sum += rank.get(wordList.get(i)) / outDegree;
                         }
                     }
                 }
-                nextPr.put(node, rank);
+                newRank.put(node, (1 - d) / wordCount + d * sum);
+                diff += Math.abs(newRank.get(node) - rank.get(node));
             }
-
-            double diff = 0.0;
-            for (String node : nodes) {
-                diff += Math.abs(nextPr.get(node) - pr.get(node));
-            }
-            pr = nextPr;
-            if (diff < tolerance) break;
-        }
-
-        return pr.getOrDefault(word, 0.0);
-    }
-    public void buildGraphFromFile(String filePath) throws IOException {
-        preStr = new StringBuffer();
-        wordList.clear();
-        bridgeMap.clear();
-        edgePairList.clear();
-        wordNum = 0;
-
-        InputStream fi = new FileInputStream(filePath);
-        int c;
-        while ((c = fi.read()) != -1) {
-            Character m = new Character((char) c);
-            if (Character.isLetter(m)) {
-                preStr.append(m.toString());
-            } else if (p.matcher(m.toString()).matches()) {
-                preStr.append(" ");
+            rank = newRank;
+            if (diff < tolerance) {
+                break;
             }
         }
-        fi.close();
-
-        TxtWordArray = preStr.toString().toLowerCase().trim().split("\\s+");
-        for (String word : TxtWordArray) {
-            if (!wordList.contains(word)) {
-                wordList.add(word);
-                wordNum++;
-            }
-        }
-
-        E = new int[wordNum][wordNum];
-        buildEdge();
-        createBridgeMap();
-        Floyd();
-    }
-    public String getDirectedGraphText() {
-        StringBuilder result = new StringBuilder();
-        result.append("=== Directed Graph ===\n");
-        for (int i = 0; i < wordNum; i++) {
-            for (int j = 0; j < wordNum; j++) {
-                if (E[i][j] != INFINITY) {
-                    String word1 = wordList.get(i);
-                    String word2 = wordList.get(j);
-                    result.append(word1).append(" -> ").append(word2)
-                            .append(" (weight: ").append(E[i][j]).append(")\n");
-                }
-            }
-        }
-        return result.toString();
+        return rank.getOrDefault(word, 0.0);
     }
 }
-

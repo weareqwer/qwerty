@@ -58,7 +58,7 @@ public class TextGraphGUI extends JFrame {
         runButton.setPreferredSize(new Dimension(100, 30));
         runButton.setMaximumSize(new Dimension(100, 30));
         JPanel runPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        runPanel.add(runButton); //변경
+        runPanel.add(runButton);
         inputPanel.add(runPanel, BorderLayout.EAST);
 
         topPanel.add(inputPanel);
@@ -93,7 +93,7 @@ public class TextGraphGUI extends JFrame {
                 JOptionPane.showMessageDialog(this, "File loaded successfully.");
             } catch (IOException ex) {
                 JOptionPane.showMessageDialog(this, "Error loading file: " + ex.getMessage());
-            }//커밋
+            }
         }
     }
 
